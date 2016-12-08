@@ -2,7 +2,7 @@ import sys
 import os
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
-
+from ui import MyCheckBox
 import time
 #import numpy as np
 #import matplotlib.pyplot as plt
@@ -12,8 +12,16 @@ import time
 class MainWindow(QMainWindow):
 
     #__datadir = os.environ['DATADIR']
-
-    def __init__(self, parent=None, debug=False):
+    # signals
+    do0_on = pyqtSignal()
+    do0_off = pyqtSignal()
+    do1_on = pyqtSignal()
+    do1_off = pyqtSignal()
+    ai_channels_name = {0:'OUT',1:'UNDEF.',2:'OUT_BUF',3:'UNDEF.',4:'UNDEF.',5:'UNDEF.',6:'UNDEF.',7:'UNDEF.'}
+    ao_channels_name = {0:'QRST_T-',1:'QGSET'}
+    do_channels_name = {0:'CALIB',1:'QRST_T+'}
+    
+    def __init__(self, parent=None, debug=False, ai_channels=range(8)):
         QMainWindow.__init__(self, parent)
 
         self.setWindowTitle(self.get_window_title())
@@ -21,6 +29,8 @@ class MainWindow(QMainWindow):
         self.debug = debug
         #plt.ion()
 
+        self.ai_channels = ai_channels
+        
         # run state 
         self.run_state = 'Undefined'
 
@@ -35,10 +45,23 @@ class MainWindow(QMainWindow):
         # counters
         self.nframes = 0
 
+        # storage for analog in values
+        self.textbox_ai = {}
+
+        # storage for analog out buttons
+        self.buttons_ao = {}
+        self.textbox_ao = {}
+
+        # storage for digital output
+        self.checkboxes_do = {}
+        
         # GUI stuff        
         self.create_menu()
         self.create_main_frame()
         self.create_status_bar()
+
+
+
 
     def get_window_title(self):
         return 'Active Reset GUI'
@@ -49,7 +72,8 @@ class MainWindow(QMainWindow):
     
 
     def create_stat_view(self, vbox):
-        
+        """Create some informatiopn on the processed frames of the system."""
+
         vbox.addWidget(QLabel('Processing statistics:'))
         hbox = QHBoxLayout()
         #hbox.addWidget(QLabel('Processing stats:'))
@@ -86,23 +110,136 @@ class MainWindow(QMainWindow):
         vbox.addLayout(hbox)
 
 
-    def create_matrix_view(self, vbox):
-        
-        vbox.addWidget(QLabel('Analog:'))
-        #hbox = QHBoxLayout()
-        #hbox.addWidget(QLabel('Processing stats:'))
+  
 
-        self.form_layout = QFormLayout()
-        self.textbox_ai = {}
+
+
+
+    def get_ai_widget(self, id, title=None):
+        """Get a horizontal box widget for a given analog input channel."""
+        label = 'AI' + str(id)
+        textbox = QLineEdit()
+        textbox.setMinimumWidth(80)
+        textbox.setMaximumWidth(80)
+        hbox = QHBoxLayout()
+        if title:
+            hbox.addWidget(QLabel(title + '(' + label + ')'))
+        else:
+            hbox.addWidget(QLabel(label))
+        hbox.addWidget(textbox)
+
+        # save as membe to access later
+        self.textbox_ai[label] = textbox
+
+        return hbox
+
+
+    def on_ao0_set(self):
+        self.emit(SIGNAL('new_ao'), 0, float(self.textbox_ao['AO0'].text()))
+
+    def on_ao1_set(self):
+        self.emit(SIGNAL('new_ao'), 1, float(self.textbox_ao['AO1'].text()))
+
+
+    def set_do0_on(self):
+        self.do0_on.emit()
+    def set_do0_off(self):
+        self.do0_off.emit()
+    def set_do1_on(self):
+        self.do1_on.emit()
+    def set_do1_off(self):
+        self.do1_off.emit()
+        
+    def get_ao_widget(self, id, title=None):
+        """Get a horizontal box widget for a given analog output channel."""
+        label = 'AO' + str(id)
+        textbox = QLineEdit()
+        textbox.setMinimumWidth(80)
+        textbox.setMaximumWidth(80)
+        hbox = QHBoxLayout()
+        if title:
+            hbox.addWidget(QLabel(title + '(' + label + ')'))
+        else:
+            hbox.addWidget(QLabel(label))
+        hbox.addWidget(textbox)
+        button = QPushButton("Set")
+        # use signals instead at some point
+        #ao_signal = pyqtSignal(int, float)
+        if id == 0:
+            self.connect(button, SIGNAL('clicked()'), self.on_ao0_set)
+        else:            
+            self.connect(button, SIGNAL('clicked()'), self.on_ao1_set)
+        hbox.addWidget(button)
+        self.buttons_ao[label] = button
+        self.textbox_ao[label] = textbox
+        return hbox
+
+
+    def get_do_widget(self, id, title=None):
+        """Get a horizontal box widget for a given digital output channel."""
+        label = 'DO' + str(id)
+        textbox = QLineEdit()
+        textbox.setMinimumWidth(80)
+        textbox.setMaximumWidth(80)        
+        #wgt.setStyleSheet("background-color: rgb(0, 0, 0);\n")
+        cb = MyCheckBox()
+        cb.setParent(self.main_frame)
+        if id == 0:
+            cb.checked_signal.connect(self.do0_on)
+            cb.unchecked_signal.connect(self.do0_off)
+        else:
+            cb.checked_signal.connect(self.do1_on)
+            cb.unchecked_signal.connect(self.do1_off)        
+        #wgt.resize(200,100)
+        #wgt.show()
+        hbox = QHBoxLayout()
+        if title:
+            hbox.addWidget(QLabel(title + '(' + label + ')'))
+        else:
+            hbox.addWidget(QLabel(label))
+        hbox.addWidget(cb)
+        self.checkboxes_do[label] = cb
+        return hbox
+
+    
+    
+        
+    def create_ai_view(self, vbox):
+        """Creates analog input boxes."""
+        hbox_1 = QHBoxLayout()
+        hbox_1.addWidget(QLabel('Analog Input Channel Monitoring'))
+        hbox_1.addStretch(1)
+        vbox.addLayout(hbox_1)
+        
+        
+        for i in self.ai_channels:
+            hb = self.get_ai_widget(i,self.ai_channels_name[i])
+            vbox.addLayout(hb)
+    
+
+    def create_ao_view(self, vbox):
+        """Creates analog output boxes and buttons."""
+        hbox_1 = QHBoxLayout()
+        hbox_1.addWidget(QLabel('Analog Output Channels'))
+        hbox_1.addStretch(2)
+        vbox.addLayout(hbox_1)
+        
         for i in range(2):
-            textbox_ai0_label = QLabel('AI' + str(i) + ':')
-            textbox_ai0 = QLineEdit()
-            textbox_ai0.setMinimumWidth(80)
-            textbox_ai0.setMaximumWidth(80)
-            self.textbox_ai[i] = textbox_ai0
-            self.form_layout.addRow( textbox_ai0_label, textbox_ai0)
-        vbox.addLayout(self.form_layout)
-        #vbox.addLayout(hbox)
+            hb = self.get_ao_widget(i, self.ao_channels_name[i])
+            vbox.addLayout(hb)
+
+
+    def create_do_view(self, vbox):
+        """Creates digital output boxes and buttons."""
+        hbox_1 = QHBoxLayout()
+        hbox_1.addWidget(QLabel('Digital Output Channels'))
+        hbox_1.addStretch(1)
+        vbox.addLayout(hbox_1)
+        
+        for i in range(2):
+            hb = self.get_do_widget(i, self.do_channels_name[i])
+            vbox.addLayout(hb)
+
 
 
     def create_options_view(self,vbox):
@@ -122,7 +259,13 @@ class MainWindow(QMainWindow):
         self.form_layout = QFormLayout()
         self.form_layout.addRow(textbox_select_asic_label, self.combo_select_asic)
         vbox.addLayout( self.form_layout )
-    
+
+
+
+
+
+
+
     def create_main_frame(self):
         """This is the main widget."""
 
@@ -145,9 +288,13 @@ class MainWindow(QMainWindow):
         vbox.addLayout( hbox_cntrl )
 
         # add options
-        self.create_options_view(vbox)
+        #self.create_options_view(vbox)
 
-        self.create_matrix_view(vbox)
+        self.create_ai_view(vbox)
+
+        self.create_ao_view(vbox)
+
+        self.create_do_view(vbox)
 
         # add plots
         #self.create_plots_view(vbox)
@@ -201,7 +348,7 @@ class MainWindow(QMainWindow):
     def new_data(self,data_flag, data):
         """ Receives new data"""
 
-        print('new_data ' + str(data_flag) + ' ' + str(data) )
+        #print('new_data ' + str(data_flag) + ' ' + str(data) )
 
         # timer
         t_now = int(round(time.time() * 1000))
@@ -226,8 +373,6 @@ class MainWindow(QMainWindow):
 
         # update ai
         self.updateAI(data)
-
-
         
         self.nframes += 1
 
@@ -241,16 +386,13 @@ class MainWindow(QMainWindow):
         self.textbox_framerate.setText('{0:.1f}Hz'.format(rate))
         self.textbox_frameprocessed.setText(str(self.nframes))
 
+
     def updateAI(self, d):
-        """Update ana."""
-        for l in range(len(d)):
-            print(l)
-            tb = self.textbox_ai[l]
-            v = d[l]['voltage']
-            print(v)
-            tb.setText( '{0:.4f}V'.format(v) )
+        """Update data field."""
+        for name, l in d.iteritems():
+            if name in self.textbox_ai:
+                self.textbox_ai[name].setText(  '{0:.4f}V'.format(l['voltage']) )
     
-        
     def set_state(self,state_str):
         self.run_state = state_str
         self.statusBar().showMessage('Run status: ' + self.run_state)
