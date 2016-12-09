@@ -17,7 +17,7 @@ class MainWindow(QMainWindow):
     do0_off = pyqtSignal()
     do1_on = pyqtSignal()
     do1_off = pyqtSignal()
-    ai_channels_name = {0:'OUT',1:'UNDEF.',2:'OUT_BUF',3:'UNDEF.',4:'UNDEF.',5:'UNDEF.',6:'UNDEF.',7:'UNDEF.'}
+    ai_channels_name = {0:'OUT',1:'UNDEF.',2:'OUT_BUF',3:'UNDEF.',4:'QRST_T-',5:'QGSET',6:'UNDEF.',7:'UNDEF.'}
     ao_channels_name = {0:'QRST_T-',1:'QGSET'}
     do_channels_name = {0:'CALIB',1:'QRST_T+'}
     

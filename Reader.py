@@ -75,7 +75,7 @@ class U12Reader(Reader):
         Reader.__init__(self, device, data, parent)
 
         # define which channels are differential
-        self.ai_channels = [0,2,4,5,6,7]
+        self.ai_channels = [0,2,4,5]
         
         # start the thread
         self.start()
