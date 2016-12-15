@@ -7,7 +7,7 @@ import time
 #import numpy as np
 #import matplotlib.pyplot as plt
 #from pix_threading import MyQThread
-
+from plot_widgets import StripWidget
 
 class MainWindow(QMainWindow):
 
@@ -60,6 +60,9 @@ class MainWindow(QMainWindow):
         self.create_main_frame()
         self.create_status_bar()
 
+        self.plot_widgets = []
+
+
 
 
 
@@ -108,12 +111,7 @@ class MainWindow(QMainWindow):
 
         #vbox.addLayout(self.form_layout_stat)
         vbox.addLayout(hbox)
-
-
-  
-
-
-
+    
 
     def get_ai_widget(self, id, title=None):
         """Get a horizontal box widget for a given analog input channel."""
@@ -128,12 +126,27 @@ class MainWindow(QMainWindow):
             hbox.addWidget(QLabel(label))
         hbox.addWidget(textbox)
 
-        # save as membe to access later
+
+        button = QPushButton("&Strip chart " + label)
+        button.clicked.connect(self.on_ai_plot_widget)
+        
+        hbox.addWidget(button)
+
         self.textbox_ai[label] = textbox
 
         return hbox
 
 
+    def on_ai_plot_widget(self):
+
+        sending_button = self.sender()
+        name = sending_button.objectName()
+        w = StripWidget(name, parent=None, show=True, n_integrate=1, max_hist=100)
+        QObject.connect(self, SIGNAL('new_data'),w.worker.new_data)
+        QObject.connect(self, SIGNAL('quit'),w.worker.close)
+        self.plot_widgets.append(w)
+    
+    
     def on_ao0_set(self):
         self.emit(SIGNAL('new_ao'), 0, float(self.textbox_ao['AO0'].text()))
 
@@ -228,7 +241,7 @@ class MainWindow(QMainWindow):
             hb = self.get_ao_widget(i, self.ao_channels_name[i])
             vbox.addLayout(hb)
 
-
+    
     def create_do_view(self, vbox):
         """Creates digital output boxes and buttons."""
         hbox_1 = QHBoxLayout()
@@ -391,7 +404,8 @@ class MainWindow(QMainWindow):
         """Update data field."""
         for name, l in d.iteritems():
             if name in self.textbox_ai:
-                self.textbox_ai[name].setText(  '{0:.4f}V'.format(l['voltage']) )
+                self.textbox_ai[name].setText(  '{0:.4f}V'.format(l) )
+                #self.textbox_ai[name].setText(  '{0:.4f}V'.format(l['voltage']) )
     
     def set_state(self,state_str):
         self.run_state = state_str

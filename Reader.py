@@ -17,13 +17,10 @@ class AnalogOutputError(ReaderError):
     """Exception raised for errors related to the analog output of the LabJack.
 
     Attributes:
-       expr --- input expression in which the error occured
-       msg --- explanation of the error
+       args --- argument
     """
-
-    def __init__(self, expr, msg):
-        self.expr = expr
-        self.msg = msg
+    def __init__(self, args):
+        self.args = args
 
 
 
@@ -63,18 +60,14 @@ class Reader(QThread):
     def on_quit(self):
         self.quit_thread()
     
-
         
-
-
-
-
 class U12Reader(Reader):
-    """Read U12 data."""    
+    """Read U12 data."""
+    
     def __init__(self, device, data, parent=None):
         Reader.__init__(self, device, data, parent)
 
-        # define which channels are differential
+        # define which channels are used
         self.ai_channels = [0,2,4,5]
         
         # start the thread
@@ -97,16 +90,59 @@ class U12Reader(Reader):
                 self.sleep(1)
                 continue
 
-            res = {}
-            for i in self.ai_channels:
-                res['AI' + str(i)] = self.device.eAnalogIn(i)
+            result_ao = self.read_ao(differential=True)
+
+            #print('AO res:')
+            #print(result_ao)
             
             # update data object
-            self.data.set_data(res)
+            self.data.set_data(result_ao)
 
             #update counter
             n += 1
 
+
+    def read_ao(self, differential=True):
+        """Read analog input.
+        
+        Args:
+            differential: do a differential reading
+            gain: only applicable for differential readout.
+        
+        Returns: dictionary of the analig voltages.
+        
+        """
+        res = {}
+        
+        if not differential:
+            for i in self.ai_channels:
+                res['AI' + str(i)] = self.device.eAnalogIn(i)['voltage']
+        else:
+
+            r = self.device.rawAISample()
+            
+            for i in self.ai_channels:
+
+                d = None
+                # differential only for AI0-AI3  channels
+                if i< 3:
+                    name_even_ch = 'Channel' + str(i)
+                    name_odd_ch = 'Channel' + str(i+1)
+                    if name_even_ch not in r:
+                        s = name_even_ch + ' not in AISample: ' + str(r)
+                        raise AnalogOutputError(s)
+                    if name_odd_ch not in r:
+                        raise AnalogOutputError(name_odd_ch  + ' not in AISample: ' + str(r))
+                    d = r[name_even_ch] - r[name_odd_ch]
+
+                else:
+                    d = self.device.eAnalogIn(i)['voltage']                    
+
+                res['AI' + str(i)] = d
+        
+        return res
+    
+    
     def set_ao(self, ch, d):
         """Set analog output value.
         
