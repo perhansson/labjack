@@ -1,5 +1,6 @@
 import sys
 import os
+import re
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
 from ui import MyCheckBox
@@ -7,7 +8,8 @@ import time
 #import numpy as np
 #import matplotlib.pyplot as plt
 #from pix_threading import MyQThread
-from plot_widgets import StripWidget
+from plot_widgets import StripWidget, OpWorker, MyQThread, logthread
+import active_reset_preamp as preamp
 
 class MainWindow(QMainWindow):
 
@@ -17,9 +19,16 @@ class MainWindow(QMainWindow):
     do0_off = pyqtSignal()
     do1_on = pyqtSignal()
     do1_off = pyqtSignal()
-    ai_channels_name = {0:'OUT',1:'UNDEF.',2:'OUT_BUF',3:'UNDEF.',4:'QRST_T-',5:'QGSET',6:'UNDEF.',7:'UNDEF.'}
-    ao_channels_name = {0:'QRST_T-',1:'QGSET'}
+
+    #NOTE that I'm using QRST_T- converter for QRST_T+.
+    ai_channels_name = {0:'OUT',1:'UNDEF.',2:'OUT_BUF',3:'UNDEF.',4:'QRST_T+',5:'QGSET',6:'UNDEF.',7:'UNDEF.'}
+    ai_channels_converters = {0:preamp.unit, 1:preamp.unit, 2:preamp.unit, 3:preamp.unit, 4:preamp.qrst_tm, 5:preamp.qgset, 6:preamp.unit, 7:preamp.unit }
+    ao_channels_name = {0:'QRST_T+',1:'QGSET'}
+    ao_channels_converters = {0:preamp.qrst_tm_ao,1:preamp.qgset_ao}
+    ao_channels_unconverters = {0:preamp.qrst_tm,1:preamp.qgset}
     do_channels_name = {0:'CALIB',1:'QRST_T+'}
+
+    CONVERT_AI = True
     
     def __init__(self, parent=None, debug=False, ai_channels=range(8)):
         QMainWindow.__init__(self, parent)
@@ -62,6 +71,9 @@ class MainWindow(QMainWindow):
 
         self.plot_widgets = []
 
+        # threads
+        self.opwThread = None
+        
 
 
 
@@ -140,18 +152,39 @@ class MainWindow(QMainWindow):
     def on_ai_plot_widget(self):
 
         sending_button = self.sender()
-        name = sending_button.objectName()
-        w = StripWidget(name, parent=None, show=True, n_integrate=1, max_hist=100)
-        QObject.connect(self, SIGNAL('new_data'),w.worker.new_data)
-        QObject.connect(self, SIGNAL('quit'),w.worker.close)
-        self.plot_widgets.append(w)
+        #name = sending_button.objectName()
+        name = sending_button.text()
+        m = re.match('.*\s(AI\d).*',name)
+        if m != None:
+            name = m.group(1)
+            m = re.match('.*AI(\d).*',name)
+            w = StripWidget(name, parent=None, show=True, n_integrate=1, max_hist=100, converter_fnc=self.ai_channels_converters[int(m.group(1))])
+            QObject.connect(self, SIGNAL('new_data'),w.worker.new_data)
+            #QObject.connect(self, SIGNAL('quit'),w.worker.close)
+            self.plot_widgets.append(w)
+        else:
+            print('on_ai_plot_widget name:\"' + name + '\" is not a valid AI name?')
     
     
-    def on_ao0_set(self):
-        self.emit(SIGNAL('new_ao'), 0, float(self.textbox_ao['AO0'].text()))
+    def on_ao0_set(self):        
+        y = float(self.textbox_ao['AO0'].text())
+        x = self.ao_channels_converters[0](y)
+        if x > 5.0:
+            x = 5.0
+        elif x < 0.0:
+            x = 0.0
+        print('ao0 val ' + str(y) + '   conv_val ' + str(x))
+        self.emit(SIGNAL('new_ao'), 0, x)
 
     def on_ao1_set(self):
-        self.emit(SIGNAL('new_ao'), 1, float(self.textbox_ao['AO1'].text()))
+        y = float(self.textbox_ao['AO1'].text())
+        x = self.ao_channels_converters[1](y)
+        if x > 5.0:
+            x = 5.0
+        elif x < 0.0:
+            x = 0.0
+        print('ao1 val ' + str(y) + '   conv_val ' + str(x))
+        self.emit(SIGNAL('new_ao'), 1, x)
 
 
     def set_do0_on(self):
@@ -171,22 +204,42 @@ class MainWindow(QMainWindow):
         textbox.setMaximumWidth(80)
         hbox = QHBoxLayout()
         if title:
-            hbox.addWidget(QLabel(title + '(' + label + ')'))
+            hbox.addWidget(QLabel(title + ' (' + label + ') [V]'))
         else:
             hbox.addWidget(QLabel(label))
         hbox.addWidget(textbox)
         button = QPushButton("Set")
         # use signals instead at some point
         #ao_signal = pyqtSignal(int, float)
-        if id == 0:
+        if id == 0:      
             self.connect(button, SIGNAL('clicked()'), self.on_ao0_set)
+            textbox.returnPressed.connect(self.on_ao0_set)            
         else:            
             self.connect(button, SIGNAL('clicked()'), self.on_ao1_set)
+            textbox.returnPressed.connect(self.on_ao1_set)
         hbox.addWidget(button)
         self.buttons_ao[label] = button
         self.textbox_ao[label] = textbox
+
         return hbox
 
+
+
+    def update_ao_text(self):
+        """ Update the analog output text based on the measured values."""
+        # use the name to find the input channel
+        for i,n_ao in self.ao_channels_name.iteritems():
+            for k,n in self.ai_channels_name.iteritems():
+                if n == n_ao:
+                    v = float(self.textbox_ai['AI'+str(k)].text())
+                    if self.CONVERT_AI:
+                        # nothing to do, already converted
+                        uv = v
+                    else:
+                        uv = self.ao_channels_unconverters[i](v) # = {0:preamp.unit,1:preamp.qgset}
+                    self.textbox_ao['AO' + str(i)].setText(str('{0:.4f}'.format(uv)))
+                    #print('found channel ' + n + ' k ' + str(k) + ' v ' + str(v) + ' uv ' + str(uv))
+    
 
     def get_do_widget(self, id, title=None):
         """Get a horizontal box widget for a given digital output channel."""
@@ -221,7 +274,7 @@ class MainWindow(QMainWindow):
         """Creates analog input boxes."""
         hbox_1 = QHBoxLayout()
         hbox_1.addWidget(QLabel('Analog Input Channel Monitoring'))
-        hbox_1.addStretch(1)
+        hbox_1.addStretch(2)
         vbox.addLayout(hbox_1)
         
         
@@ -252,6 +305,24 @@ class MainWindow(QMainWindow):
         for i in range(2):
             hb = self.get_do_widget(i, self.do_channels_name[i])
             vbox.addLayout(hb)
+
+
+    def create_script_view(self, vbox):
+        """Creates digital output boxes and buttons."""
+        hbox_1 = QHBoxLayout()
+        hbox_1.addWidget(QLabel('Scripts'))
+        hbox_1.addStretch(2)
+        vbox.addLayout(hbox_1)
+
+        hbox_2 = QHBoxLayout()
+        hbox_2.addWidget(QLabel('Find O.P.'))
+        self.op_button = QPushButton("&Find OP")
+        self.op_button.clicked.connect(self.on_op)
+        hbox_2.addWidget( self.op_button)                                    
+        self.op_button_quit = QPushButton("&Quit OP")
+        self.op_button_quit.clicked.connect(self.on_op_quit)
+        hbox_2.addWidget( self.op_button_quit)                                    
+        vbox.addLayout( hbox_2 )
 
 
 
@@ -307,8 +378,11 @@ class MainWindow(QMainWindow):
 
         self.create_ao_view(vbox)
 
-        self.create_do_view(vbox)
+        #self.create_do_view(vbox)
 
+        self.create_script_view(vbox)
+
+        
         # add plots
         #self.create_plots_view(vbox)
 
@@ -386,7 +460,15 @@ class MainWindow(QMainWindow):
 
         # update ai
         self.updateAI(data)
+
+        # if it's the first one, update output text boxes
+        if self.nframes < 5:
+            self.update_ao_text()
         
+        
+        # send data to plot widgets
+        self.emit(SIGNAL('new_data'), data_flag, data)
+
         self.nframes += 1
 
         #QApplication.processEvents()
@@ -404,8 +486,77 @@ class MainWindow(QMainWindow):
         """Update data field."""
         for name, l in d.iteritems():
             if name in self.textbox_ai:
-                self.textbox_ai[name].setText(  '{0:.4f}V'.format(l) )
-                #self.textbox_ai[name].setText(  '{0:.4f}V'.format(l['voltage']) )
+                uv = l
+                # check if we are convertering these or not
+                if self.CONVERT_AI:
+                    #print('convert ' + name)
+                    # find channel name to be used for look up
+                    m = re.match('.*AI(\d).*',name)
+                    if m != None:                        
+                        uv = self.ai_channels_converters[int(m.group(1))](l) 
+                        #print('convert ' + str(l) + ' to ' + str(uv) + ' for ' + name)
+                self.textbox_ai[name].setText(  '{0:.4f}'.format(uv) )
+
+
+
+    def opw_test(self, data):
+        logthread('mainwin.opw_test ' + str(data))
+    
+                
+    def on_op(self):
+        """Attempt to find operating point."""
+        # reset QGSET
+        self.textbox_ao['AO1'].setText('-0.5')
+        self.on_ao1_set()
+        # set QRST_T+ to a large value to ensure switch will be closed
+        self.textbox_ao['AO0'].setText('0.5')
+        self.on_ao0_set()
+
+        logthread('on_op')
+
+        
+        self.opwThread = OpWorker(self.opw_test, 1.3)
+        
+        
+        #self.opwThread = MyQThread()
+        self.opwThread.start()
+
+        #self.opw = OpWorker(self.opw_test, 1.3)
+        self.connect(self, SIGNAL('new_data'), self.opwThread.new_data)
+        self.connect(self.opwThread, SIGNAL('opw_update'),self.opw_update)
+        self.connect(self.opwThread, SIGNAL('opw_finished'),self.opw_finished)
+        #self.opw.moveToThread( self.opwThread )        
+
+    def opw_finished(self):
+        print("WHAAAAT")
+        self.disconnect(self.opw, SIGNAL('new_data'), self.opw.new_data)
+        self.opwThread.quit()
+
+    def opw_update(self, value):
+        print("opw_update " + str(value))
+        v = float(self.textbox_ai['AI5'].text())        
+        v_updated = v + value
+        print("opw_update v  " + str(v) + ' to ' + str(v_updated))        
+        self.textbox_ao['AO1'].setText('{0:f}'.format(v_updated))
+        self.on_ao1_set()
+
+
+    def on_op_quit(self):
+        self.disconnect(self, SIGNAL('new_data'), self.opwThread.new_data)
+        self.opwThread.quit()
+        can_exit = self.opwThread.wait(1000)        
+        #can_exit = True
+        if can_exit:
+            print('[op] : thread quit successfully')            
+        else:
+            print('[op] :  thread quit timed out')
+            self.opwThread.terminate()
+            can_exit = self.opwThread.wait(1000)        
+            if can_exit:
+                print('[op] :  thread terminated successfully')            
+            else:
+                print('[PlotWidget] : ERROR  thread failed to die')
+                #event.ignore()
     
     def set_state(self,state_str):
         self.run_state = state_str
@@ -434,6 +585,8 @@ class MainWindow(QMainWindow):
         print('[MainWindow]: on_quit')        
         print('[MainWindow]: kill thread')        
         self.emit(SIGNAL('quit'))
+        for w in self.plot_widgets:
+            w.close()
         self.close()
     
 

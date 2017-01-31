@@ -136,8 +136,13 @@ class U12Reader(Reader):
                     d = r[name_even_ch] - r[name_odd_ch]
 
                 else:
-                    d = self.device.eAnalogIn(i)['voltage']                    
-
+                    try:
+                        d = self.device.eAnalogIn(i)['voltage']
+                    except IndexError:
+                        print('failed on i=' + str(i) + ' rawAISamples: ' + str(r) )
+                
+                    
+                
                 res['AI' + str(i)] = d
         
         return res
@@ -190,10 +195,11 @@ class U12Reader(Reader):
 class DataReader(QThread):
     """ Base class for reading data"""
     debug = False
-    def __init__(self, data, parent=None):
+    def __init__(self, data, parent=None, sleep_nsec=1.0):
         QThread.__init__(self, parent)    
         self.start()
         self.data = data
+        self.sleep_time = sleep_nsec
 
     def on_quit(self):
         self.quit()
@@ -206,9 +212,26 @@ class DataReader(QThread):
         n = 0
         i = 0
 
+        time_now = time.time()
+        time_last = time_now
+        dt = 0.
+        
         while True:
 
-            print('DataReader last flag emitted ' + str(i) + ' total ' + str(n))
+            # timing stuff
+            time_now = time.time()
+            dt += time_now - time_last
+            time_last = time_now
+            # print some timing stuff
+            if n % 50 == 0:
+                dt /= 50.0
+                # fraction of the sleep time we get a delay
+                dead_time = (dt/self.sleep_time -1.0)*100
+            
+                print('DataReader last flag emitted ' + str(i) + ' total ' + str(n) + ' dt ' + str(dt) + ' dead ' + '{0:.2f}%'.format(dead_time))
+
+                # reset
+                dt = 0.
 
             self.data.mutex.lock()
             if self.data.data_flag != i:
@@ -221,7 +244,8 @@ class DataReader(QThread):
                 n += 1
             self.data.mutex.unlock()
             # sleep a little
-            self.sleep(1)                
+            time.sleep(self.sleep_time)
+            #self.sleep(self.sleep_time)
 
 
 

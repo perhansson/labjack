@@ -13,10 +13,15 @@ from PyQt4.QtCore import *
 from PyQt4.QtGui import *
 #from pix_threading import MyQThread
 from PyQt4.QtCore import QThread
+import threading
 
 printThreadInfo = False
 
 
+
+def logthread(caller):
+    print('%-25s: %s, %s,' % (caller, threading.current_thread().name,
+                              threading.current_thread().ident))
 
 
 class MyQThread(QThread):
@@ -29,15 +34,61 @@ class MyQThread(QThread):
         QThread.run(self)
 
 
+
+
+class OpWorker(QThread):
+
+    def __init__(self, function, out_target):
+        super(OpWorker, self).__init__()
+        logthread('OpWorker.__init__')
+        self.function = function
+        self.out_target = out_target
+        self.data = None
+        self.flag = 0
+
+    def process(self):
+        if self.flag == 1:
+            logthread('OpWorker.process new data')
+            #print(str(data_flag) + '  ' + str(data))
+            qgset = self.data['AI5']
+            out = self.data['AI0']
+            
+            print('OP: QGSET ' + '{0:.4f}'.format(qgset) + ' OUT ' + '{0:.4f}'.format(out))
+            adiff = abs(self.out_target - out)
+            if adiff < 0.1:
+                self.emit(SIGNAL('opw_finished'))
+            diff = self.out_target - out
+            if diff > 0:
+                self.emit(SIGNAL('opw_update'), -0.1)
+            elif diff < 0:
+                self.emit(SIGNAL('opw_update'), 0.1)
+            self.flag = 0
+    
+    def new_data(self, data_flag, data):
+        logthread('OpWorker.new_data')
+        self.data = data
+        self.flag = 1
+        return
+
+    def run(self):
+        logthread('OpWorker.run')
+        while(True):
+            self.process()
+            time.sleep(1)
+    
+    
+
+
 class PlotWorker(QObject):
 
-    def __init__(self, name, parent = None, n_integrate = 1):    
+    def __init__(self, name, parent = None, n_integrate = 1, converter_fnc = None ):    
         #QThread.__init__(self, parent)
         super(PlotWorker, self).__init__()
         self.exiting = False
         self.name = name
         self.n_integrate = n_integrate
         self.n = 0
+        self.converter_fnc = converter_fnc
         #self.start()
 
 
@@ -266,8 +317,8 @@ class PlotWidget(QWidget):
 
 class StripWorker(PlotWorker):
 
-    def __init__(self, name, parent = None, n_integrate = 1, max_hist=100):    
-        PlotWorker.__init__(self, name, parent, n_integrate)
+    def __init__(self, name, parent = None, n_integrate = 1, max_hist=100, converter_fnc=None):    
+        PlotWorker.__init__(self, name, parent, n_integrate, converter_fnc)
         self.y = [] 
         for i in range(max_hist):
             self.y.append(0)
@@ -275,24 +326,34 @@ class StripWorker(PlotWorker):
 
     def new_data(self, frame_id ,data):
         """Process the data and send to GUI when done."""
-        self.print_thread('new_data')
-        #print('StripWorker: process data ' + str(data))
-        self.y.pop(0)
-        self.y.append(data)
-        self.n += 1
-
+        self.print_thread('StripWorker name \"' + self.name + '\": new_data ' + str(data))
+        # look for data using name
+        # I think the keys are QStrings so cant search normally
+        for k,v in data.iteritems():
+            if k == self.name:
+                self.y.pop(0)
+                if self.converter_fnc != None:
+                    v = self.converter_fnc(v)
+                self.y.append(v)
+                self.n += 1
+        
         if self.n >= self.n_integrate:
             self.emit(SIGNAL('data'), frame_id, self.y)
             self.n = 0
         self.print_thread('new_data DONE')
-        
+
+    def clear_data(self):
+        """Reset data in the widgets"""
+        self.y = []
+
 
 class StripWidget(PlotWidget):
 
-    def __init__(self, name, parent=None, show=False, n_integrate = 1, max_hist=100):
+    def __init__(self, name, parent=None, show=False, n_integrate = 1, max_hist=100, converter_fnc=None):
         PlotWidget.__init__(self,name, parent, show)
         self.d = None
-        self.worker = StripWorker(self.name, parent, n_integrate, max_hist)
+        self.name = name
+        self.worker = StripWorker(self.name, parent, n_integrate, max_hist, converter_fnc)
         self.worker.moveToThread( self.thread )
         self.connect(self.worker, SIGNAL('data'), self.on_draw)
         self.worker.print_thread('worker init')
@@ -326,8 +387,8 @@ class StripWidget(PlotWidget):
         # timer stuff
         dt = time.clock() - t0
         self.t0sum += dt
-        if self.n % 10 == 0:
+        if self.n % 50 == 0:
             #if self.debug:
-            print('StripWidget on_draw {0} frames with {1} sec/image'.format(self.n, self.t0sum/10.))
+            print('StripWidget on_draw {0} frames with {1} sec/image'.format(self.n, self.t0sum/50.))
             self.t0sum = 0.
     

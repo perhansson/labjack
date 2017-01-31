@@ -16,6 +16,7 @@ def get_args():
     parser = argparse.ArgumentParser('CDMS Active Reset GUI.')
     parser.add_argument('--debug',action='store_true',help='debug toggle')
     parser.add_argument('--go',action='store_true',help='start')
+    parser.add_argument('--sleep', '-s', type=float, default=1.0, help='Sleep time for data reader.')
     args = parser.parse_args()
     print( args )
     return args
@@ -37,7 +38,7 @@ def main():
     #u12Reader = U12SimReader(data)
 
     # create the independent data cruncher
-    data_reader = DataReader(data)
+    data_reader = DataReader(data, sleep_nsec=args.sleep)
     
     
 
@@ -45,7 +46,6 @@ def main():
     form = MainWindow(parent=None, debug=args.debug, ai_channels=u12Reader.ai_channels)
 
     # connections
-
     form.connect(data_reader, SIGNAL('new_data'), form.new_data)
     form.connect(form, SIGNAL('acqState'),u12Reader.set_state)
     form.connect(form, SIGNAL('quit'),u12Reader.quit)
