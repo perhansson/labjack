@@ -8,7 +8,8 @@ import time
 #import numpy as np
 #import matplotlib.pyplot as plt
 #from pix_threading import MyQThread
-from plot_widgets import StripWidget, OpWorker, MyQThread, logthread
+from plot_widgets import StripWidget
+from util import logthread, MyQThread, OpWorker
 import active_reset_preamp as preamp
 
 class MainWindow(QMainWindow):
@@ -150,7 +151,7 @@ class MainWindow(QMainWindow):
 
 
     def on_ai_plot_widget(self):
-
+        logthread('Mainwindow.on_ai_plot_widget')
         sending_button = self.sender()
         #name = sending_button.objectName()
         name = sending_button.text()
@@ -434,6 +435,7 @@ class MainWindow(QMainWindow):
     
     def new_data(self,data_flag, data):
         """ Receives new data"""
+        #logthread('Mainwindow.new_data')
 
         #print('new_data ' + str(data_flag) + ' ' + str(data) )
 

@@ -3,10 +3,10 @@ import os
 import time
 import copy
 import random
-
 import numpy as np
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
+from util import logthread
 
 class ReaderError(Exception):
     """Base class for exceptions in the LabJack interface."""
@@ -66,6 +66,7 @@ class U12Reader(Reader):
     
     def __init__(self, device, data, parent=None):
         Reader.__init__(self, device, data, parent)
+        logthread('U12Reader.__init__')
 
         # define which channels are used
         self.ai_channels = [0,2,4,5]
@@ -76,24 +77,36 @@ class U12Reader(Reader):
     def run(self):
         """Read data."""
 
-        print('U12Reader run ' + str(self.thread))
+        logthread('U12Reader.run')
         
         # number of reads
         n = 0
+
+        # timing
+        dt = 0
+        time_now = 0
 
         while True:
 
             # wait until state is correct
             if self.state != 'Running':
                 #if Reader.debug:
-                print('U12Reader thread waiting')
+                logthread('U12Reader thread waiting')
                 self.sleep(1)
                 continue
 
+            # print some timing stuff
+            if n % 500 == 0:
+                logthread('U12Reader.run average time to read ' + '{0:.3f}ms'.format(dt/500*1000))
+                dt = 0
+
+            # timing stuff
+            time_now = time.time()
+
+            # read from device
             result_ao = self.read_ao(differential=True)
 
-            #print('AO res:')
-            #print(result_ao)
+            dt += time.time() - time_now
             
             # update data object
             self.data.set_data(result_ao)
@@ -158,7 +171,7 @@ class U12Reader(Reader):
         Returns:
         
         """
-        print('U12Reader set_ana ' + str(ch) + ' ' + str(d))
+        logthread('U12Reader.set_ao ' + str(ch) + ' ' + str(d))
 
         if ch == 0:
             self.device.eAnalogOut(demo=0, analogOut0=d, analogOut1=-1.0)  
@@ -197,6 +210,7 @@ class DataReader(QThread):
     debug = False
     def __init__(self, data, parent=None, sleep_nsec=1.0):
         QThread.__init__(self, parent)    
+        logthread('DataReader.__init__')
         self.start()
         self.data = data
         self.sleep_time = sleep_nsec
@@ -207,7 +221,7 @@ class DataReader(QThread):
     def run(self):
         """Read data and emit it."""
 
-        print('DataReader run ' + str(self.thread))
+        logthread('DataReader.run')
         
         n = 0
         i = 0
@@ -223,12 +237,13 @@ class DataReader(QThread):
             dt += time_now - time_last
             time_last = time_now
             # print some timing stuff
-            if n % 50 == 0:
+            if n % 50 == 0 and n > 0:
                 dt /= 50.0
                 # fraction of the sleep time we get a delay
                 dead_time = (dt/self.sleep_time -1.0)*100
+                emit_time = dt - self.sleep_time
             
-                print('DataReader last flag emitted ' + str(i) + ' total ' + str(n) + ' dt ' + str(dt) + ' dead ' + '{0:.2f}%'.format(dead_time))
+                logthread('DataReader.run last flag emitted ' + str(i) + ' total ' + str(n) + ' emit_time ' + str(emit_time*1000) + 'ms dt ' + str(dt) + ' dead_time ' + '{0:.2f}%'.format(dead_time))
 
                 # reset
                 dt = 0.
