@@ -11,6 +11,7 @@ import time
 from plot_widgets import StripWidget
 from util import logthread, MyQThread, OpWorker
 import active_reset_preamp as preamp
+from Reader import DumpReader
 
 class MainWindow(QMainWindow):
 
@@ -74,8 +75,9 @@ class MainWindow(QMainWindow):
 
         # threads
         self.opwThread = None
-        
 
+        # file writer
+        self.fileWriter = None
 
 
 
@@ -325,6 +327,16 @@ class MainWindow(QMainWindow):
         hbox_2.addWidget( self.op_button_quit)                                    
         vbox.addLayout( hbox_2 )
 
+        hbox_3 = QHBoxLayout()
+        hbox_3.addWidget(QLabel('Record raw file'))
+        self.rec_button = QPushButton("&Start")
+        self.rec_button.clicked.connect(self.on_record)
+        hbox_3.addWidget( self.rec_button)                                    
+        self.rec_button_quit = QPushButton("&Stop")
+        self.rec_button_quit.clicked.connect(self.on_record_quit)
+        hbox_3.addWidget( self.rec_button_quit)                                    
+        vbox.addLayout( hbox_3 )
+
 
 
     def create_options_view(self,vbox):
@@ -439,6 +451,9 @@ class MainWindow(QMainWindow):
 
         #print('new_data ' + str(data_flag) + ' ' + str(data) )
 
+        # store data if I need the data structure
+        self.data = data
+        
         # timer
         t_now = int(round(time.time() * 1000))
         if self.t0_frame == None:
@@ -505,6 +520,17 @@ class MainWindow(QMainWindow):
         logthread('mainwin.opw_test ' + str(data))
     
                 
+    def on_record(self):
+        """Record data from the labjack."""
+        logthread('on_record')
+        #self.fileWriter = DumpReader(self.data)
+        self.fileWriter.on_start_recording()
+
+    def on_record_quit(self):
+        """Stop record data from the labjack."""
+        logthread('on_record_quit')        
+        self.fileWriter.on_quit()
+    
     def on_op(self):
         """Attempt to find operating point."""
         # reset QGSET

@@ -8,7 +8,7 @@ from PyQt4.QtGui import *
 from PyQt4.QtCore import *
 
 from MainWindow import MainWindow
-from Reader import U12Reader, U12Data, DataReader, U12SimReader
+from Reader import U12Reader, U12Data, DataReader, U12SimReader, DumpReader
 
 import u12
 
@@ -39,12 +39,13 @@ def main():
 
     # create the independent data cruncher
     data_reader = DataReader(data, sleep_nsec=args.sleep)
-    
-    
 
     #### create the main GUI
     form = MainWindow(parent=None, debug=args.debug, ai_channels=u12Reader.ai_channels)
 
+    # set file writer
+    form.fileWriter = DumpReader(data)
+    
     # connections
     form.connect(data_reader, SIGNAL('new_data'), form.new_data)
     form.connect(form, SIGNAL('acqState'),u12Reader.set_state)

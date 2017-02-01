@@ -205,15 +205,17 @@ class U12Reader(Reader):
     
 
 
+
+        
 class DataReader(QThread):
     """ Base class for reading data"""
     debug = False
     def __init__(self, data, parent=None, sleep_nsec=1.0):
         QThread.__init__(self, parent)    
         logthread('DataReader.__init__')
-        self.start()
         self.data = data
         self.sleep_time = sleep_nsec
+        self.start()
 
     def on_quit(self):
         self.quit()
@@ -261,6 +263,78 @@ class DataReader(QThread):
             # sleep a little
             time.sleep(self.sleep_time)
             #self.sleep(self.sleep_time)
+
+
+
+        
+class DumpReader(QThread):
+    """ Base class for dumping data to a file"""
+    def __init__(self, data, parent=None, sleep_nsec=0):
+        QThread.__init__(self, parent)    
+        logthread('DumpReader.__init__')
+        self.data = data
+        self.sleep_time = sleep_nsec
+        self.recording = False
+        self.f = None
+        #self.start()
+
+    def on_quit(self):
+        self.on_stop_recording()
+        self.quit()
+
+    def on_start_recording(self):
+        logthread('DumpReader.on_start_recording')
+        self.recording = True
+        if self.f != None and not self.f.closed:
+            self.f.close()
+        self.f = open('data.txt','w+') #a+ for appending
+        self.start()
+
+    def on_stop_recording(self):
+        self.recording = False
+        time.sleep(1)
+        self.f.close()
+    
+    def run(self):
+        """Read data and dump to file."""
+
+        logthread('DumpReader.run')
+        
+        n = 0
+        i = 0
+
+        time_now = time.time()
+        dt = 0.
+        np = 0
+        
+        while True:
+
+            if not self.recording:
+                continue
+            
+            time_now = time.time()
+
+            self.data.mutex.lock()
+            if self.data.data_flag != i:
+                d = self.data.get_data()
+                self.f.write(' '.join([str(time_now), str(d),'\n']))
+                # update flag
+                i = self.data.data_flag
+                n += 1
+            self.data.mutex.unlock()
+
+            dt += time.time() - time_now
+
+            # print some timing stuff
+            if n % 500 == 0 and n > 0 and n != np:
+                dt /= 500.0
+                wtime = dt - self.sleep_time            
+                logthread('DumpReader.run last flag emitted ' + str(i) + ' total ' + str(n) + ' time/write ' + str(wtime*1000) + 'ms')
+                dt = 0.
+                np = n
+            
+            if self.sleep_time != 0:
+                time.sleep(self.sleep_time)
 
 
 
