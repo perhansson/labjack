@@ -15,7 +15,8 @@ from Reader import DumpReader
 
 class MainWindow(QMainWindow):
 
-    #__datadir = os.environ['DATADIR']
+    __datadir = os.environ['PWD']
+
     # signals
     do0_on = pyqtSignal()
     do0_off = pyqtSignal()
@@ -78,6 +79,9 @@ class MainWindow(QMainWindow):
 
         # file writer
         self.fileWriter = None
+
+
+
 
 
 
@@ -161,7 +165,7 @@ class MainWindow(QMainWindow):
         if m != None:
             name = m.group(1)
             m = re.match('.*AI(\d).*',name)
-            w = StripWidget(name, parent=None, show=True, n_integrate=1, max_hist=100, converter_fnc=self.ai_channels_converters[int(m.group(1))])
+            w = StripWidget(name, parent=None, show=True, n_integrate=1, max_hist=200, converter_fnc=self.ai_channels_converters[int(m.group(1))])
             QObject.connect(self, SIGNAL('new_data'),w.worker.new_data)
             #QObject.connect(self, SIGNAL('quit'),w.worker.close)
             self.plot_widgets.append(w)
@@ -337,8 +341,45 @@ class MainWindow(QMainWindow):
         hbox_3.addWidget( self.rec_button_quit)                                    
         vbox.addLayout( hbox_3 )
 
+        hbox_dark = QHBoxLayout()
+        textbox_dark_file_label = QLabel('Filename:')
+        self.textbox_dark_file = QLineEdit()
+        self.textbox_dark_file.setMinimumWidth(200)
+        self.connect(self.textbox_dark_file, SIGNAL('editingFinished ()'), self.on_dark_file_select)
+        self.b_open_dark = QPushButton(self)
+        self.b_open_dark.setText('Select file')
+        self.b_open_dark.clicked.connect(self.showDarkFileDialog)
+        hbox_dark.addWidget(textbox_dark_file_label)
+        hbox_dark.addWidget(self.b_open_dark)
+        hbox_dark.addWidget(self.textbox_dark_file)
+        hbox_dark.addStretch(1)
+        vbox.addLayout(hbox_dark)
+        
 
 
+    def showDarkFileDialog(self):
+        """Open file dialog to select a file."""
+        # select via dialog
+        file_name = QFileDialog.getOpenFileName(self,'Open file',self.__datadir)
+
+        # set the textbox
+        self.textbox_dark_file.setText(file_name)
+
+        # use the "button" click function to actually apply
+        self.on_dark_file_select()
+    
+        
+
+    def on_dark_file_select(self):
+        #if self.debug: 
+        print('[MainWindow]:  on_dark_file_select')
+        t = self.textbox_dark_file.text()
+        if t == '':
+            print('[MainWindow]:  no dark file selected')
+            t = self.fileWriter.filename
+        self.fileWriter.set_filename(str(t))
+    
+    
     def create_options_view(self,vbox):
         """Add options to form."""
                 
@@ -523,7 +564,6 @@ class MainWindow(QMainWindow):
     def on_record(self):
         """Record data from the labjack."""
         logthread('on_record')
-        #self.fileWriter = DumpReader(self.data)
         self.fileWriter.on_start_recording()
 
     def on_record_quit(self):
@@ -534,19 +574,16 @@ class MainWindow(QMainWindow):
     def on_op(self):
         """Attempt to find operating point."""
         # reset QGSET
-        self.textbox_ao['AO1'].setText('-0.5')
+        self.textbox_ao['AO1'].setText('-0.2')
         self.on_ao1_set()
         # set QRST_T+ to a large value to ensure switch will be closed
         self.textbox_ao['AO0'].setText('0.5')
         self.on_ao0_set()
 
         logthread('on_op')
-
         
-        self.opwThread = OpWorker(self.opw_test, 1.3)
+        self.opwThread = OpWorker(self.opw_test, 0, step=0.001)
         
-        
-        #self.opwThread = MyQThread()
         self.opwThread.start()
 
         #self.opw = OpWorker(self.opw_test, 1.3)

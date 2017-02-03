@@ -45,7 +45,8 @@ def main():
 
     # set file writer
     form.fileWriter = DumpReader(data)
-    
+    form.textbox_dark_file.setText(form.fileWriter.filename)
+
     # connections
     form.connect(data_reader, SIGNAL('new_data'), form.new_data)
     form.connect(form, SIGNAL('acqState'),u12Reader.set_state)

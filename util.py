@@ -25,7 +25,7 @@ class MyQThread(QThread):
 
 class OpWorker(QThread):
 
-    def __init__(self, function, out_target):
+    def __init__(self, function, out_target, step=0.01):
         super(OpWorker, self).__init__()
         logthread('OpWorker.__init__')
         self.function = function
@@ -34,6 +34,7 @@ class OpWorker(QThread):
         self.flag = 0
         self.f = None
         self.running = False
+        self.step = step
 
     def process(self):
         finished = False
@@ -54,10 +55,11 @@ class OpWorker(QThread):
                 self.emit(SIGNAL('opw_finished'))
                 finished = True
             diff = self.out_target - out
+            print('diff ' + str(diff))
             if diff > 0:
-                self.emit(SIGNAL('opw_update'), -0.1)
+                self.emit(SIGNAL('opw_update'), self.step)
             elif diff < 0:
-                self.emit(SIGNAL('opw_update'), 0.1)
+                self.emit(SIGNAL('opw_update'), -self.step)
 
             self.flag = 0
 
@@ -76,7 +78,7 @@ class OpWorker(QThread):
         finished = False
         while not finished:
             finished = self.process()
-            time.sleep(1)
+            time.sleep(5)
     
     def quit(self):
         self.running = False

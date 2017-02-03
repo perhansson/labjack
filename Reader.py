@@ -269,14 +269,20 @@ class DataReader(QThread):
         
 class DumpReader(QThread):
     """ Base class for dumping data to a file"""
-    def __init__(self, data, parent=None, sleep_nsec=0):
+    def __init__(self, data, parent=None, sleep_nsec=0, filename='data.txt'):
         QThread.__init__(self, parent)    
         logthread('DumpReader.__init__')
         self.data = data
         self.sleep_time = sleep_nsec
         self.recording = False
         self.f = None
+        self.filename = filename
         #self.start()
+
+
+    def set_filename(self,name):
+        """Set file name."""
+        self.filename = name
 
     def on_quit(self):
         self.on_stop_recording()
@@ -284,16 +290,19 @@ class DumpReader(QThread):
 
     def on_start_recording(self):
         logthread('DumpReader.on_start_recording')
-        self.recording = True
-        if self.f != None and not self.f.closed:
-            self.f.close()
-        self.f = open('data.txt','w+') #a+ for appending
+        if self.f != None:
+            if not self.f.closed:
+                self.f.close()
+        self.f = open(self.filename,'a+') #a+ for appending
         self.start()
+        self.recording = True
 
     def on_stop_recording(self):
         self.recording = False
-        time.sleep(1)
-        self.f.close()
+        if self.f != None:
+            time.sleep(1)
+            self.f.close()
+            self.f = None
     
     def run(self):
         """Read data and dump to file."""
@@ -317,7 +326,7 @@ class DumpReader(QThread):
             self.data.mutex.lock()
             if self.data.data_flag != i:
                 d = self.data.get_data()
-                self.f.write(' '.join([str(time_now), str(d),'\n']))
+                self.f.write(' '.join(['{0:10.6f}'.format(time_now), str(d),'\n']))
                 # update flag
                 i = self.data.data_flag
                 n += 1
