@@ -1,0 +1,10 @@
+Data from testing active reset with modified preamp board.
+The feedback is connected but opamp is follower.
+Date: 1/27/17
+
+AO_0 QRST_T+ AO_1 QGSET OUT QDR R31
+0 -0.636 0 -0.841 -2.62 0.396 2.697
+5 0.461 2 -0.245 -2.62 0.395 2.691
+5 0.471 2.3 -0.168 -2.44 0.180 2.447
+5 0.473 2.5 -0.112 -0.049 0.036 0.061
+5 0.473 2.4 -0.140 -0.849 0.120 0.854
