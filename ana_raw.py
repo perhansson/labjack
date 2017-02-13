@@ -70,6 +70,9 @@ def main():
     plt.ylabel('OUT (V)')
     #plt.text(0.1,0.85,'QRST_T+ = +0.47V', transform = ax1_221.transAxes)
 
+    if args.savename != None:
+        plt.savefig('out_' + args.savename + '_' +  os.path.basename(os.path.splitext(args.file[0])[0]) + '.png')
+
 
 
     fig2 = plt.figure(2, figsize=(12,12))
@@ -78,6 +81,11 @@ def main():
     #plt.xlabel('QGSET+/Switch source voltage (V)')
     plt.xlabel('OUT (V)')
     #plt.text(0.1,0.85,'QRST_T+ = +0.47V', transform = ax1_221.transAxes)
+
+
+    if args.savename != None:
+        plt.savefig('out_hist_' + args.savename + '_' +  os.path.basename(os.path.splitext(args.file[0])[0]) + '.png')
+
     
     plt.show()
 
