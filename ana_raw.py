@@ -33,11 +33,14 @@ def main():
     with open(args.file[0],'r') as f:
         for line in f:
             s = line.split(':')
+            if len(s) != 5:
+                print('line format is wrong "' + str(line) + '" \n -> skip')
+                continue
             m = re.match('(.*)\s\{',s[0])
             if m != None:
                 ts.append(float(m.group(1)))
             else:
-                print('time format is wrong')
+                print('time format is wrong: ' + str(line) + ' s ' + str(s) + ' s[0] ' + str(s[0]))
                 print(s[0])
                 sys.exit(1)
             AI5.append(float(s[1].split()[0].rstrip(',')))
